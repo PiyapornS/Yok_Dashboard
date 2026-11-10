@@ -1,0 +1,6 @@
+{
+  "name": "Live Training Evaluation & Projector Dashboard",
+  "description": "เว็บแอปเก็บความพึงพอใจการอบรม รองรับผู้ตอบผ่านมือถือ และแดชบอร์ดสรุปผลแบบเรียลไทม์ขึ้นจอโปรเจกเตอร์ พร้อมส่งออก CSV และโค้ดแยก 2 ไฟล์สำหรับ Firebase Realtime Database",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

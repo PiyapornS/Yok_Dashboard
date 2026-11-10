@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Training Evaluation Dashboard (จอโปรเจกเตอร์)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Prompt & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- QRCode CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Prompt', 'Plus Jakarta Sans', sans-serif;
+    }
+    .num {
+      font-family: 'Plus Jakarta Sans', 'Prompt', sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+    /* Custom scrollbar for comments */
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(241, 245, 249, 0.8);
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(203, 213, 225, 0.8);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen p-4 md:p-8 selection:bg-indigo-100 selection:text-indigo-900">
+
+  <!-- Main Container -->
+  <div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- Top Navigation & Presentation Header -->
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div>
+        <div class="flex items-center gap-3">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            LIVE SYNC (อัปเดตอัตโนมัติ)
+          </span>
+          <h1 class="text-xl md:text-2xl font-bold tracking-tight text-slate-900">แดชบอร์ดสรุปผลการประเมินการอบรม</h1>
+        </div>
+        <p class="text-xs md:text-sm text-slate-500 mt-1">อัปเดตผลคะแนนและข้อเสนอแนะแบบเรียลไทม์ทันทีที่มีผู้ส่งข้อมูล</p>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="btn-fullscreen" class="px-3.5 py-2 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+          <span>โหมดเต็มจอ</span>
+        </button>
+
+        <button id="btn-show-qr" class="px-3.5 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
+          <span>แสดง QR Code บนจอ</span>
+        </button>
+
+        <button id="btn-export-csv" class="px-3.5 py-2 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          <span>ดาวน์โหลด CSV (Excel)</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Top KPI Grid: White Background Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      
+      <!-- Card 1: Total Responses -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden">
+        <div class="text-xs font-medium text-slate-500 mb-1">จำนวนผู้ตอบแบบประเมิน</div>
+        <div class="flex items-baseline gap-2">
+          <span id="kpi-total-count" class="text-4xl md:text-5xl font-extrabold text-slate-900 num tracking-tight">0</span>
+          <span class="text-sm text-slate-500">คน</span>
+        </div>
+        <div class="mt-2 text-xs text-sky-700 flex items-center gap-1.5 font-medium">
+          <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+          <span>ตอบผ่านสมาร์ตโฟน</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Overall Average -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden">
+        <div class="text-xs font-medium text-slate-500 mb-1">คะแนนความพึงพอใจเฉลี่ยรวม</div>
+        <div class="flex items-baseline gap-2">
+          <span id="kpi-overall-avg" class="text-4xl md:text-5xl font-extrabold text-slate-900 num tracking-tight">0.00</span>
+          <span class="text-sm text-slate-400">/ 5.00</span>
+        </div>
+        <div class="mt-2 text-xs font-semibold text-emerald-700" id="kpi-likert-label">
+          ระดับ: รอข้อมูลการประเมิน
+        </div>
+      </div>
+
+      <!-- Card 3: Highest Scored Metric -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden">
+        <div class="text-xs font-medium text-slate-500 mb-1">ข้อที่ได้คะแนนสูงสุด</div>
+        <div id="kpi-best-title" class="text-base font-semibold text-slate-800 truncate">-</div>
+        <div class="mt-2 flex items-baseline gap-2">
+          <span id="kpi-best-score" class="text-2xl font-bold text-slate-900 num">0.00</span>
+          <span class="text-xs text-slate-500">คะแนนเฉลี่ย</span>
+        </div>
+      </div>
+
+      <!-- Card 4: Likert Standard Guide -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs text-[11px] text-slate-600 space-y-1">
+        <div class="font-semibold text-slate-800 text-xs mb-1.5">เกณฑ์การแปลผลคะแนนเฉลี่ย</div>
+        <div class="flex justify-between items-center"><span class="text-emerald-700 font-bold">4.51 - 5.00</span><span>มากที่สุด (Highest)</span></div>
+        <div class="flex justify-between items-center"><span class="text-sky-700 font-bold">3.51 - 4.50</span><span>มาก (High)</span></div>
+        <div class="flex justify-between items-center"><span class="text-amber-700 font-bold">2.51 - 3.50</span><span>ปานกลาง (Moderate)</span></div>
+        <div class="flex justify-between items-center"><span class="text-orange-700 font-bold">1.51 - 2.50</span><span>น้อย (Low)</span></div>
+        <div class="flex justify-between items-center"><span class="text-rose-700 font-bold">1.00 - 1.50</span><span>น้อยที่สุด (Lowest)</span></div>
+      </div>
+
+    </div>
+
+    <!-- Main Content: Charts & Suggestions -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left Column: Pastel Pie & Bar Chart (7 Cols) -->
+      <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#86efac]"></span>
+              <h2 class="text-base font-bold text-slate-900">ผลการประเมินแยกตามรายข้อ (Pastel Chart)</h2>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">เปรียบเทียบค่าเฉลี่ยและสัดส่วนคะแนนด้วยกราฟวงกลมพาสเทล</p>
+          </div>
+          <div class="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 shrink-0">
+            <button id="btn-mode-pie" type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white text-slate-900 border border-slate-200 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer">
+              <span>กราฟวงกลม (Pie)</span>
+            </button>
+            <button id="btn-mode-bar" type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 hover:text-slate-900 transition-all flex items-center gap-1.5 cursor-pointer">
+              <span>กราฟแท่ง (Bar)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Pie Chart Canvas Container -->
+        <div id="pie-chart-wrapper" class="flex flex-col items-center justify-center p-2">
+          <div class="w-64 h-64 relative">
+            <canvas id="pastelPieCanvas"></canvas>
+          </div>
+          <div id="pie-legends" class="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full mt-4 text-xs"></div>
+        </div>
+
+        <!-- Questions Progress Bars (Hidden in Pie mode) -->
+        <div id="questions-bar-list" class="space-y-4 hidden pt-2">
+          <div class="text-center py-10 text-sm text-slate-400">กำลังเชื่อมต่อฐานข้อมูล...</div>
+        </div>
+      </div>
+
+      <!-- Right Column: Suggestions & Live Feedback Feed (5 Cols) -->
+      <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col h-[540px]">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-bold text-slate-900">ข้อเสนอแนะล่าสุด</h2>
+            <span id="suggestions-count-badge" class="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-50 text-purple-700 border border-purple-200 tabular-nums">0</span>
+          </div>
+          <span class="text-xs text-slate-400">เรียลไทม์</span>
+        </div>
+
+        <!-- Scrollable comments list -->
+        <div id="suggestions-feed" class="flex-1 overflow-y-auto space-y-3 pr-2 custom-scroll">
+          <div class="text-center py-16 text-sm text-slate-400">
+            ยังไม่มีข้อเสนอแนะเพิ่มเติมจากผู้เข้าอบรม
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- QR Code Modal (For projecting on screen) -->
+  <div id="qr-modal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 max-w-sm w-full text-center shadow-xl relative">
+      <button id="btn-close-qr" class="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 mb-3">
+        สแกนตอบแบบสอบถาม
+      </div>
+      <h3 class="text-lg font-bold text-slate-900 mb-1">สแกนด้วยกล้องมือถือ</h3>
+      <p class="text-xs text-slate-500 mb-5">เพื่อเปิดหน้าประเมินความพึงพอใจการอบรม</p>
+
+      <div class="bg-white p-3 rounded-2xl border border-slate-200 inline-block mb-4 shadow-xs">
+        <canvas id="qr-canvas" class="w-48 h-48 block"></canvas>
+      </div>
+
+      <div class="text-xs text-slate-600 bg-slate-50 rounded-xl p-3 border border-slate-200 break-all mb-4 text-left font-mono" id="qr-link-text">
+        -
+      </div>
+
+      <button id="btn-copy-link" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl transition-all shadow-xs cursor-pointer">
+        คัดลอกลิงก์แบบประเมิน
+      </button>
+    </div>
+  </div>
+
+  <!-- Firebase App & Realtime Database SDK (v8 CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <script>
+    // ==========================================
+    // 1. ตั้งค่า FIREBASE CONFIG ของท่านที่นี่
+    // คัดลอกได้จาก Firebase Console -> Project Settings -> General -> Your apps
+    // ==========================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyYOUR_API_KEY_HERE",
+      authDomain: "your-project-id.firebaseapp.com",
+      databaseURL: "https://your-project-id-default-rtdb.firebaseio.com",
+      projectId: "your-project-id",
+      storageBucket: "your-project-id.appspot.com",
+      messagingSenderId: "1234567890",
+      appId: "1:1234567890:web:abcdef123456"
+    };
+
+    let allEvaluations = [];
+
+    // Helper Likert Interpretation & Pastel Palette
+    const pastelColors = ['#86efac', '#c4b5fd', '#7dd3fc', '#fdba74', '#f472b6'];
+    const shortTitles = ['1. เนื้อหาหลักสูตร', '2. วิทยากรผู้สอน', '3. สื่อและเอกสาร', '4. เวลาและสถานที่', '5. ภาพรวมความพึงพอใจ'];
+    let pastelPieChart = null;
+
+    // View toggle controls
+    const btnModePie = document.getElementById('btn-mode-pie');
+    const btnModeBar = document.getElementById('btn-mode-bar');
+    const pieWrapper = document.getElementById('pie-chart-wrapper');
+    const barListEl = document.getElementById('questions-bar-list');
+
+    btnModePie.addEventListener('click', () => {
+      btnModePie.className = 'px-3 py-1.5 text-xs font-medium rounded-lg bg-white text-slate-900 border border-slate-200 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer';
+      btnModeBar.className = 'px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 hover:text-slate-900 transition-all flex items-center gap-1.5 cursor-pointer';
+      pieWrapper.classList.remove('hidden');
+      barListEl.classList.add('hidden');
+    });
+
+    btnModeBar.addEventListener('click', () => {
+      btnModeBar.className = 'px-3 py-1.5 text-xs font-medium rounded-lg bg-white text-slate-900 border border-slate-200 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer';
+      btnModePie.className = 'px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 hover:text-slate-900 transition-all flex items-center gap-1.5 cursor-pointer';
+      pieWrapper.classList.add('hidden');
+      barListEl.classList.remove('hidden');
+    });
+
+    // Helper Likert Interpretation
+    function getLikert(avg) {
+      if (avg >= 4.51) return { label: 'มากที่สุด (Highest)', color: 'text-emerald-700', pastel: '#86efac' };
+      if (avg >= 3.51) return { label: 'มาก (High)', color: 'text-sky-700', pastel: '#7dd3fc' };
+      if (avg >= 2.51) return { label: 'ปานกลาง (Moderate)', color: 'text-amber-700', pastel: '#fde047' };
+      if (avg >= 1.51) return { label: 'น้อย (Low)', color: 'text-orange-700', pastel: '#fdba74' };
+      return { label: 'น้อยที่สุด (Lowest)', color: 'text-rose-700', pastel: '#fca5a5' };
+    }
+
+    const questionTitles = [
+      '1. เนื้อหาตรงตามวัตถุประสงค์และประยุกต์ใช้ได้จริง',
+      '2. วิทยากรมีความรู้ความเชี่ยวชาญและถ่ายทอดเข้าใจง่าย',
+      '3. สื่อ อุปกรณ์ และเอกสารประกอบการอบรมมีความเหมาะสม',
+      '4. การจัดสรรเวลาและสถานที่อบรมมีความเหมาะสม',
+      '5. ความพึงพอใจโดยรวมในการเข้าร่วมการอบรม'
+    ];
+
+    // คำนวณและแสดงผล Dashboard
+    function renderDashboard(items) {
+      allEvaluations = items;
+      const count = items.length;
+
+      document.getElementById('kpi-total-count').textContent = count;
+
+      if (count === 0) {
+        document.getElementById('kpi-overall-avg').textContent = '0.00';
+        document.getElementById('kpi-likert-label').textContent = 'ระดับ: รอข้อมูลการประเมิน';
+        document.getElementById('kpi-best-title').textContent = '-';
+        document.getElementById('kpi-best-score').textContent = '0.00';
+        document.getElementById('questions-bar-list').innerHTML = `
+          <div class="text-center py-12 text-sm text-slate-400">
+            ยังไม่มีผู้ส่งแบบประเมิน สแกน QR Code ด้านบนเพื่อเริ่มประเมิน
+          </div>
+        `;
+        document.getElementById('pie-legends').innerHTML = '';
+        document.getElementById('suggestions-feed').innerHTML = `
+          <div class="text-center py-16 text-sm text-slate-400">
+            ยังไม่มีข้อเสนอแนะเพิ่มเติมจากผู้เข้าอบรม
+          </div>
+        `;
+        return;
+      }
+
+      // คำนวณค่าเฉลี่ยรายข้อ
+      const qSums = [0, 0, 0, 0, 0];
+      const qCounts = [
+        { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+        { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+        { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+        { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+        { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+      ];
+
+      items.forEach(it => {
+        [1, 2, 3, 4, 5].forEach((num, idx) => {
+          const val = Number(it[`q${num}`]) || 0;
+          qSums[idx] += val;
+          if (val >= 1 && val <= 5) {
+            qCounts[idx][val] = (qCounts[idx][val] || 0) + 1;
+          }
+        });
+      });
+
+      const qAvgs = qSums.map(s => Number((s / count).toFixed(2)));
+      const overallAvg = Number((qAvgs.reduce((a, b) => a + b, 0) / 5).toFixed(2));
+      const overallLikert = getLikert(overallAvg);
+
+      document.getElementById('kpi-overall-avg').textContent = overallAvg.toFixed(2);
+      const likertLabelEl = document.getElementById('kpi-likert-label');
+      likertLabelEl.textContent = `ระดับ: ${overallLikert.label}`;
+      likertLabelEl.className = `mt-2 text-xs font-semibold text-emerald-700`;
+
+      // หาข้อที่คะแนนสูงสุด
+      let bestIdx = 0;
+      qAvgs.forEach((avg, idx) => {
+        if (avg > qAvgs[bestIdx]) bestIdx = idx;
+      });
+      document.getElementById('kpi-best-title').textContent = questionTitles[bestIdx].replace(/^\d+\.\s*/, '');
+      document.getElementById('kpi-best-score').textContent = qAvgs[bestIdx].toFixed(2);
+
+      // Render Pastel Pie Chart with Chart.js on White Theme
+      const canvasEl = document.getElementById('pastelPieCanvas');
+      if (canvasEl && window.Chart) {
+        if (pastelPieChart) {
+          pastelPieChart.destroy();
+        }
+        pastelPieChart = new Chart(canvasEl, {
+          type: 'doughnut',
+          data: {
+            labels: shortTitles,
+            datasets: [{
+              data: qAvgs,
+              backgroundColor: pastelColors,
+              borderColor: '#ffffff',
+              borderWidth: 3,
+              hoverOffset: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: '#ffffff',
+                titleColor: '#0f172a',
+                bodyColor: '#334155',
+                borderColor: '#e2e8f0',
+                borderWidth: 1,
+                padding: 10,
+                boxPadding: 4,
+                callbacks: {
+                  label: function(context) {
+                    return ` ${context.label}: ${context.raw} คะแนน (${((context.raw / 5) * 100).toFixed(0)}%)`;
+                  }
+                }
+              }
+            },
+            cutout: '65%'
+          }
+        });
+      }
+
+      // Render Pie Legends in White Theme
+      const legendsEl = document.getElementById('pie-legends');
+      legendsEl.innerHTML = qAvgs.map((avg, idx) => {
+        const lk = getLikert(avg);
+        return `
+          <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+            <div class="flex items-center gap-2 truncate">
+              <span class="w-3.5 h-3.5 rounded-full shrink-0 border border-white shadow-2xs" style="background-color: ${pastelColors[idx]}"></span>
+              <span class="text-slate-800 font-medium truncate">${shortTitles[idx]}</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0 ml-2">
+              <span class="font-bold text-slate-900 num">${avg.toFixed(2)}</span>
+              <span class="text-[10px] px-2 py-0.5 rounded font-semibold text-slate-900" style="background-color: ${pastelColors[idx]}">
+                ${lk.label.split(' ')[0]}
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Render Pastel Bar Charts in White Theme (Matches the screenshot layout in crisp white style)
+      const barList = document.getElementById('questions-bar-list');
+      barList.innerHTML = qAvgs.map((avg, idx) => {
+        const percent = Math.min(100, Math.max(0, (avg / 5) * 100)).toFixed(1);
+        const lk = getLikert(avg);
+        const pastel = pastelColors[idx];
+        const dist = qCounts[idx];
+        return `
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs sm:text-sm gap-2">
+              <span class="font-medium text-slate-800 truncate">${questionTitles[idx]}</span>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="font-bold text-slate-900 num text-base">${avg.toFixed(2)}</span>
+                <span class="text-[11px] px-2 py-0.5 rounded-md font-semibold text-slate-900" style="background-color: ${pastel}">
+                  ${lk.label.split(' ')[0]}
+                </span>
+              </div>
+            </div>
+
+            <!-- Pastel Progress Bar -->
+            <div class="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden p-0.5 border border-slate-200">
+              <div class="h-full rounded-full transition-all duration-700 ease-out" style="width: ${percent}%; background-color: ${pastel};"></div>
+            </div>
+
+            <!-- Breakdown counts: 5★, 4★, 3★, 2★, 1★ -->
+            <div class="flex items-center justify-between text-[11px] text-slate-500 px-1">
+              <span>สัดส่วนคะแนน:</span>
+              <div class="flex items-center gap-3">
+                <span class="tabular-nums">5★: <strong class="text-slate-800">${dist[5]}</strong></span>
+                <span class="tabular-nums">4★: <strong class="text-slate-800">${dist[4]}</strong></span>
+                <span class="tabular-nums">3★: <strong class="text-slate-800">${dist[3]}</strong></span>
+                <span class="tabular-nums">2★: <strong class="text-slate-800">${dist[2]}</strong></span>
+                <span class="tabular-nums">1★: <strong class="text-slate-800">${dist[1]}</strong></span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Render Suggestions in White Theme
+      const suggestions = items
+        .filter(it => it.suggestion && it.suggestion.trim().length > 0)
+        .reverse();
+
+      document.getElementById('suggestions-count-badge').textContent = suggestions.length;
+      const feed = document.getElementById('suggestions-feed');
+
+      if (suggestions.length === 0) {
+        feed.innerHTML = `
+          <div class="text-center py-16 text-sm text-slate-400">
+            ยังไม่มีข้อเสนอแนะเพิ่มเติมจากผู้เข้าอบรม
+          </div>
+        `;
+      } else {
+        feed.innerHTML = suggestions.map(it => {
+          const date = it.timestamp ? new Date(it.timestamp) : new Date();
+          const timeStr = date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+          const avgScore = it.avg ? Number(it.avg).toFixed(2) : '-';
+          return `
+            <div class="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 space-y-1.5 hover:border-slate-300 hover:bg-white transition-colors">
+              <div class="flex items-center justify-between text-[11px] text-slate-500">
+                <span class="flex items-center gap-1 text-purple-700 font-medium">
+                  ผู้เข้าอบรม
+                </span>
+                <div class="flex items-center gap-2">
+                  <span>คะแนน ${avgScore}/5</span>
+                  <span>·</span>
+                  <span>เวลา ${timeStr} น.</span>
+                </div>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-800 leading-relaxed break-words">"${it.suggestion}"</p>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // Connect Firebase Realtime Database
+    try {
+      if (firebaseConfig.apiKey && !firebaseConfig.apiKey.includes('YOUR_API_KEY')) {
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        db.ref('evaluations').on('value', snapshot => {
+          const val = snapshot.val();
+          if (val) {
+            const list = Object.keys(val).map(key => ({ id: key, ...val[key] }));
+            renderDashboard(list);
+          } else {
+            renderDashboard([]);
+          }
+        });
+      } else {
+        // Fallback demo data if not configured
+        console.info('Showing demo state: please configure firebaseConfig with your credentials.');
+        const sampleDemo = [
+          { q1: 5, q2: 5, q3: 4, q4: 4, q5: 5, avg: 4.6, suggestion: 'วิทยากรอธิบายดีมาก ตัวอย่างชัดเจน นำไปปรับใช้ได้จริงครับ', timestamp: new Date().toISOString() },
+          { q1: 5, q2: 5, q3: 5, q4: 5, q5: 5, avg: 5.0, suggestion: 'การจัดอบรมยอดเยี่ยม บรรยากาศเป็นกันเองมาก', timestamp: new Date().toISOString() },
+          { q1: 4, q2: 5, q3: 4, q4: 4, q5: 4, avg: 4.2, suggestion: 'อยากให้มีเนื้อหาขั้นสูงต่อในสัปดาห์หน้า', timestamp: new Date().toISOString() },
+          { q1: 5, q2: 4, q3: 5, q4: 5, q5: 5, avg: 4.8, suggestion: 'เอกสารและสื่อประกอบการสอนทำได้ดีมาก ประทับใจครับ', timestamp: new Date().toISOString() },
+          { q1: 5, q2: 5, q3: 5, q4: 4, q5: 5, avg: 4.8, suggestion: 'อยากให้จัดกิจกรรมแบบนี้อีกครับ ได้ประโยชน์ต่อการทำงานจริง', timestamp: new Date().toISOString() }
+        ];
+        renderDashboard(sampleDemo);
+      }
+    } catch (err) {
+      console.error('Firebase error:', err);
+    }
+
+    // Export CSV with UTF-8 BOM
+    document.getElementById('btn-export-csv').addEventListener('click', () => {
+      if (!allEvaluations || allEvaluations.length === 0) {
+        alert('ยังไม่มีข้อมูลสำหรับดาวน์โหลด');
+        return;
+      }
+
+      const BOM = '\uFEFF';
+      const headers = ['ลำดับ', 'วันที่-เวลา', 'ข้อ 1', 'ข้อ 2', 'ข้อ 3', 'ข้อ 4', 'ข้อ 5', 'คะแนนเฉลี่ย', 'ข้อเสนอแนะ'];
+      const rows = allEvaluations.map((it, idx) => {
+        const d = it.timestamp ? new Date(it.timestamp).toLocaleString('th-TH') : '-';
+        const avg = it.avg || (((it.q1||0)+(it.q2||0)+(it.q3||0)+(it.q4||0)+(it.q5||0))/5).toFixed(2);
+        const esc = s => `"${(s||'').toString().replace(/"/g, '""')}"`;
+        return [idx + 1, esc(d), it.q1, it.q2, it.q3, it.q4, it.q5, avg, esc(it.suggestion || '-')].join(',');
+      });
+
+      const csvContent = BOM + [headers.join(','), ...rows].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `training_evaluation_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    // QR Code Generation
+    const surveyUrl = window.location.origin + window.location.pathname.replace('dashboard.html', 'survey.html');
+    document.getElementById('qr-link-text').textContent = surveyUrl;
+
+    const canvas = document.getElementById('qr-canvas');
+    if (window.QRCode && canvas) {
+      QRCode.toCanvas(canvas, surveyUrl, { width: 192, margin: 1, color: { dark: '#0f172a', light: '#ffffff' } }, function (error) {
+        if (error) console.error(error);
+      });
+    }
+
+    // QR Modal Controls
+    const qrModal = document.getElementById('qr-modal');
+    document.getElementById('btn-show-qr').addEventListener('click', () => {
+      qrModal.classList.remove('hidden');
+    });
+    document.getElementById('btn-close-qr').addEventListener('click', () => {
+      qrModal.classList.add('hidden');
+    });
+    qrModal.addEventListener('click', (e) => {
+      if (e.target === qrModal) qrModal.classList.add('hidden');
+    });
+
+    document.getElementById('btn-copy-link').addEventListener('click', () => {
+      navigator.clipboard.writeText(surveyUrl).then(() => {
+        alert('คัดลอกลิงก์เรียบร้อยแล้ว: ' + surveyUrl);
+      });
+    });
+
+    // Fullscreen toggle
+    document.getElementById('btn-fullscreen').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => alert(err.message));
+      } else {
+        document.exitFullscreen();
+      }
+    });
+  </script>
+</body>
+</html>
