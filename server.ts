@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,19 +19,30 @@ interface Evaluation {
   clientToken?: string;
 }
 
-const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'evaluations.json');
-
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  try {
+// Ensure writable data directory across all deployment environments (Cloud Run, Docker, serverless)
+let DATA_DIR = path.join(__dirname, 'data');
+try {
+  if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  // Test write access
+  const probeFile = path.join(DATA_DIR, '.probe');
+  fs.writeFileSync(probeFile, 'ok');
+  fs.unlinkSync(probeFile);
+} catch {
+  // If root/applet directory is read-only in production container, fallback to /tmp
+  DATA_DIR = path.join('/tmp', 'liveeval-data');
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
   } catch (err) {
-    console.warn('Could not create data dir, using in-memory only', err);
+    console.warn('Could not create writable DATA_DIR, will use in-memory storage only:', err);
   }
 }
+const DATA_FILE = path.join(DATA_DIR, 'evaluations.json');
 
-// Initial sample seed if completely empty
+// Default starter samples so dashboard always has rich demo data until respondents submit
 const DEFAULT_INITIAL_SAMPLES: Evaluation[] = [
   {
     id: 'demo-1',
@@ -80,17 +92,23 @@ const DEFAULT_INITIAL_SAMPLES: Evaluation[] = [
 
 let evaluations: Evaluation[] = [];
 
-// Load from file if exists
+// Load from file or initialize with default samples
 try {
   if (fs.existsSync(DATA_FILE)) {
     const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    evaluations = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      evaluations = parsed;
+    } else {
+      evaluations = [...DEFAULT_INITIAL_SAMPLES];
+      fs.writeFileSync(DATA_FILE, JSON.stringify(evaluations, null, 2), 'utf-8');
+    }
   } else {
     evaluations = [...DEFAULT_INITIAL_SAMPLES];
     fs.writeFileSync(DATA_FILE, JSON.stringify(evaluations, null, 2), 'utf-8');
   }
 } catch (err) {
-  console.warn('Error reading evaluations file, initializing defaults:', err);
+  console.warn('Notice loading evaluations file, using defaults:', err);
   evaluations = [...DEFAULT_INITIAL_SAMPLES];
 }
 
@@ -98,7 +116,7 @@ function saveEvaluations() {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(evaluations, null, 2), 'utf-8');
   } catch (err) {
-    console.error('Failed to save evaluations to disk:', err);
+    console.error('Failed to save evaluations to disk, maintaining in-memory copy:', err);
   }
 }
 
@@ -195,7 +213,8 @@ function calculateSummary(items: Evaluation[]) {
 const sseClients = new Set<Response>();
 
 function broadcastUpdate(type: 'NEW_SUBMISSION' | 'RESET' | 'SEED', data: any) {
-  const payload = `event: message\ndata: ${JSON.stringify({ type, timestamp: new Date().toISOString(), summary: calculateSummary(evaluations), detail: data })}\n\n`;
+  const summary = calculateSummary(evaluations);
+  const payload = `data: ${JSON.stringify({ type, timestamp: new Date().toISOString(), summary, detail: data })}\n\n`;
   for (const client of sseClients) {
     try {
       client.write(payload);
@@ -207,17 +226,36 @@ function broadcastUpdate(type: 'NEW_SUBMISSION' | 'RESET' | 'SEED', data: any) {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  // Support Cloud Run / dynamic PORT, defaulting to port 3000
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+  // Middleware
   app.use(express.json());
 
-  // API endpoints
+  // CORS and preflight handling for all environments
+  app.use((_req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control');
+    if (_req.method === 'OPTIONS') {
+      res.sendStatus(200);
+      return;
+    }
+    next();
+  });
+
+  // Health endpoint
   app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', count: evaluations.length });
+    res.json({
+      status: 'ok',
+      count: evaluations.length,
+      timestamp: new Date().toISOString()
+    });
   });
 
   // Get current summary and evaluations list
   app.get('/api/evaluations', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const summary = calculateSummary(evaluations);
     res.json({
       summary,
@@ -249,36 +287,46 @@ async function startServer() {
     evaluations.push(newEval);
     saveEvaluations();
 
-    // Broadcast to all connected dashboards
+    // Broadcast to all connected dashboards immediately
     broadcastUpdate('NEW_SUBMISSION', newEval);
 
     res.status(201).json({
       success: true,
       id: newEval.id,
-      timestamp: newEval.timestamp
+      timestamp: newEval.timestamp,
+      count: evaluations.length
     });
   });
 
   // Server-Sent Events stream for real-time dashboard updates
   app.get('/api/stream', (req: Request, res: Response) => {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    // Flush headers if supported
-    res.flushHeaders?.();
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
+
+    // Immediate unbuffered comment ping for Cloud Run / reverse proxies
+    res.write(': stream-connected\n\n');
 
     // Send initial snapshot
-    const initialPayload = `event: init\ndata: ${JSON.stringify({ summary: calculateSummary(evaluations) })}\n\n`;
+    const initialPayload = `data: ${JSON.stringify({ type: 'INIT', summary: calculateSummary(evaluations) })}\n\n`;
     res.write(initialPayload);
 
     sseClients.add(res);
 
-    // Heartbeat to keep connection alive
+    // Heartbeat every 15s to keep connection alive through proxies
     const intervalId = setInterval(() => {
-      res.write(': heartbeat\n\n');
-    }, 20000);
+      try {
+        res.write(': keepalive\n\n');
+      } catch {
+        clearInterval(intervalId);
+        sseClients.delete(res);
+      }
+    }, 15000);
 
     req.on('close', () => {
       clearInterval(intervalId);
@@ -367,9 +415,12 @@ async function startServer() {
     res.send(csvContent);
   });
 
-  // Mount Vite or static files
+  // Mount Vite middleware in dev or static files in production
   const isProduction = process.env.NODE_ENV === 'production';
-  if (!isProduction) {
+  const distPath = path.join(__dirname, 'dist');
+  const hasDist = fs.existsSync(distPath) && fs.existsSync(path.join(distPath, 'index.html'));
+
+  if (!isProduction || !hasDist) {
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: { middlewareMode: true },
@@ -377,7 +428,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -385,7 +435,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Live Training Evaluation Server running on http://0.0.0.0:${PORT}`);
+    console.log(`Live Training Evaluation Server running on port ${PORT}`);
   });
 }
 

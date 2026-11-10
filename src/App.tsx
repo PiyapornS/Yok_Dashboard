@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Navbar } from './components/Navbar.tsx';
 import { SurveyView } from './components/SurveyView.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
@@ -6,12 +6,26 @@ import { CodeGuideView } from './components/CodeGuideView.tsx';
 import { QRCodeModal } from './components/QRCodeModal.tsx';
 import { DashboardSummary } from './types.ts';
 
+const CACHE_KEY = 'liveeval_summary_cache_v2';
+
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'survey' | 'dashboard' | 'guide'>('dashboard');
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  
+  // Initialize with cached summary if available to prevent flashing 0 during deployment wakeup
+  const [summary, setSummary] = useState<DashboardSummary | null>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch {}
+    return null;
+  });
+
   const [isConnected, setIsConnected] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [surveyUrl, setSurveyUrl] = useState('');
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
 
   // Determine initial tab from query parameter (?view=survey or ?view=dashboard)
   useEffect(() => {
@@ -35,25 +49,55 @@ export default function App() {
     }
   }, []);
 
-  // Fetch initial summary
+  // Update summary and cache
+  const updateSummaryState = useCallback((newSummary: DashboardSummary) => {
+    setSummary(newSummary);
+    setIsConnected(true);
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(newSummary));
+    } catch {}
+  }, []);
+
+  // Fetch summary from backend
   const fetchSummary = useCallback(async () => {
     try {
-      const res = await fetch('/api/evaluations');
+      const res = await fetch('/api/evaluations', {
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.summary) {
-          setSummary(data.summary);
+          updateSummaryState(data.summary);
         }
       }
     } catch (err) {
-      console.warn('Could not fetch evaluations:', err);
+      console.warn('API polling fallback in progress:', err);
     }
-  }, []);
+  }, [updateSummaryState]);
 
-  // Real-time Server-Sent Events (SSE) connection
+  // Real-time synchronization: SSE + Cross-Tab BroadcastChannel + Polling
   useEffect(() => {
+    // Initial fetch
     fetchSummary();
 
+    // 1. Cross-tab BroadcastChannel for 0-latency instant updates between tabs/windows
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('liveeval_broadcast');
+        broadcastChannelRef.current = bc;
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'UPDATE' && event.data?.summary) {
+            updateSummaryState(event.data.summary);
+          } else if (event.data?.type === 'REFRESH') {
+            fetchSummary();
+          }
+        };
+      }
+    } catch (err) {
+      console.warn('BroadcastChannel not available:', err);
+    }
+
+    // 2. Server-Sent Events (SSE) listener
     let eventSource: EventSource | null = null;
     let reconnectTimeout: any = null;
 
@@ -65,52 +109,47 @@ export default function App() {
           setIsConnected(true);
         };
 
-        eventSource.onmessage = (event) => {
+        const handleIncoming = (event: MessageEvent) => {
           try {
             const data = JSON.parse(event.data);
             if (data.summary) {
-              setSummary(data.summary);
+              updateSummaryState(data.summary);
             }
           } catch (e) {
             console.error('Error parsing SSE event:', e);
           }
         };
 
-        eventSource.addEventListener('init', (event: any) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.summary) {
-              setSummary(data.summary);
-            }
-          } catch (e) {
-            console.error('Error parsing SSE init:', e);
-          }
-        });
+        eventSource.onmessage = handleIncoming;
+        eventSource.addEventListener('message', handleIncoming);
+        eventSource.addEventListener('init', handleIncoming);
 
         eventSource.onerror = () => {
-          setIsConnected(false);
           eventSource?.close();
           // Auto reconnect after 3 seconds
           reconnectTimeout = setTimeout(connectSSE, 3000);
         };
       } catch (err) {
-        console.warn('SSE connection failed, falling back to polling:', err);
+        console.warn('SSE connection init error, active polling fallback:', err);
       }
     }
 
     connectSSE();
 
-    // Fallback periodic poll every 10 seconds just in case SSE drops
+    // 3. Resilient periodic poll every 5 seconds (guarantees fresh data even if SSE is buffered by proxies)
     const pollInterval = setInterval(() => {
       fetchSummary();
-    }, 10000);
+    }, 5000);
 
     return () => {
       eventSource?.close();
       clearTimeout(reconnectTimeout);
       clearInterval(pollInterval);
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.close();
+      }
     };
-  }, [fetchSummary]);
+  }, [fetchSummary, updateSummaryState]);
 
   const handleSelectTab = (tab: 'survey' | 'dashboard' | 'guide') => {
     setCurrentTab(tab);
@@ -136,6 +175,9 @@ export default function App() {
           <SurveyView
             onSubmittedSuccess={() => {
               fetchSummary();
+              try {
+                broadcastChannelRef.current?.postMessage({ type: 'REFRESH' });
+              } catch {}
             }}
           />
         )}
@@ -164,21 +206,21 @@ export default function App() {
           <div className="flex items-center gap-4 text-slate-500">
             <button
               onClick={() => handleSelectTab('survey')}
-              className="hover:text-slate-800 transition-colors"
+              className="hover:text-slate-800 transition-colors cursor-pointer"
             >
               หน้าแบบประเมิน
             </button>
             <span>·</span>
             <button
               onClick={() => handleSelectTab('dashboard')}
-              className="hover:text-slate-800 transition-colors"
+              className="hover:text-slate-800 transition-colors cursor-pointer"
             >
               แดชบอร์ดจอใหญ่
             </button>
             <span>·</span>
             <button
               onClick={() => handleSelectTab('guide')}
-              className="hover:text-slate-800 transition-colors"
+              className="hover:text-slate-800 transition-colors cursor-pointer"
             >
               โค้ด Firebase 2 ไฟล์
             </button>
