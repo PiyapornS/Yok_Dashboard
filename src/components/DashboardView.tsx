@@ -12,7 +12,6 @@ import {
   MessageSquareQuote,
   Radio,
   PieChart as PieChartIcon,
-  BarChart3,
   SlidersHorizontal
 } from 'lucide-react';
 import { DashboardSummary, LIKERT_LEVELS, QUESTION_DEFINITIONS, PASTEL_STAR_COLORS } from '../types.ts';
@@ -34,7 +33,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
-  const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
   const [pieMode, setPieMode] = useState<'questions' | 'ratings' | string>('questions');
 
   const toggleFullscreen = () => {
@@ -309,7 +307,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Left Column: Pastel Pie Chart / Bar Chart Card */}
         <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
           
-          {/* Card Header with View Switchers */}
+          {/* Card Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
               <div className="flex items-center gap-2">
@@ -323,38 +321,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </p>
             </div>
 
-            {/* Chart Type Toggle: Pie vs Bar */}
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 shrink-0">
-              <button
-                type="button"
-                onClick={() => setChartType('pie')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                  chartType === 'pie'
-                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <PieChartIcon className="w-3.5 h-3.5 text-emerald-600" />
-                <span>กราฟวงกลม (Pie)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setChartType('bar')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                  chartType === 'bar'
-                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <BarChart3 className="w-3.5 h-3.5 text-sky-600" />
-                <span>กราฟแท่ง (Bar)</span>
-              </button>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 font-medium shrink-0">
+              <PieChartIcon className="w-3.5 h-3.5 text-emerald-600" />
+              <span>กราฟวงกลม (Pie Chart)</span>
             </div>
           </div>
 
           {/* Sub-Filters for Pie Chart */}
-          {chartType === 'pie' && totalCount > 0 && (
+          {totalCount > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap text-xs">
               <span className="text-slate-500 flex items-center gap-1 mr-1">
                 <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -403,12 +377,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           )}
 
-          {/* Main Visualizer */}
+          {/* Main Visualizer: Pastel Pie/Donut Chart */}
           {questions.length === 0 || totalCount === 0 ? (
             <div className="text-center py-16 text-slate-400 text-sm">
               ยังไม่มีผู้ตอบแบบประเมิน สแกน QR Code ด้านบนเพื่อส่งคะแนนแรก
             </div>
-          ) : chartType === 'pie' ? (
+          ) : (
             <div className="pt-2">
               <PastelPieChart
                 data={pieSlices}
@@ -417,59 +391,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 centerSubtext={pieCenterSubtext}
                 isDonut={true}
               />
-            </div>
-          ) : (
-            /* Pastel Bar Chart View */
-            <div className="space-y-6 pt-2">
-              {questions.map((q) => {
-                const percent = Math.min(100, Math.max(0, (q.avg / 5) * 100));
-                const def = QUESTION_DEFINITIONS.find(d => d.id === q.id);
-                const pastel = def?.pastelColor || '#86efac';
-
-                return (
-                  <div key={q.id} className="space-y-2">
-                    <div className="flex items-center justify-between gap-3 text-xs sm:text-sm">
-                      <span className="font-medium text-slate-800 leading-snug truncate">
-                        {q.title}
-                      </span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-bold text-slate-900 text-base tabular-nums">
-                          {q.avg.toFixed(2)}
-                        </span>
-                        <span
-                          className="text-[11px] px-2 py-0.5 rounded-md font-semibold text-slate-900"
-                          style={{ backgroundColor: pastel }}
-                        >
-                          {q.likert.label.split(' ')[0]}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Pastel Progress Bar */}
-                    <div className="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden p-0.5 border border-slate-200">
-                      <div
-                        className="h-full rounded-full transition-all duration-700 ease-out"
-                        style={{
-                          width: `${percent}%`,
-                          backgroundColor: pastel
-                        }}
-                      />
-                    </div>
-
-                    {/* Breakdown counts: 5★, 4★, 3★, 2★, 1★ */}
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
-                      <span>สัดส่วนคะแนน:</span>
-                      <div className="flex items-center gap-3">
-                        {[5, 4, 3, 2, 1].map((star) => (
-                          <span key={star} className="tabular-nums">
-                            {star}★: <strong className="text-slate-700">{q.distribution?.[star] || 0}</strong>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           )}
         </div>
